@@ -65,6 +65,7 @@ if [ -f "$REF_PDF" ]; then
         dc_run gs -q -dNOPAUSE -dBATCH -sDEVICE=png16m -r"$DPI" \
             -sOutputFile="$WORK_C/${name}-%02d.png" "/work/out/$f" >/dev/null 2>&1
     done
+    shopt -s nullglob
     for old in "$WORK"/old-*.png; do
         n=$(basename "$old" .png); n=${n#old-}
         new="$WORK/new-$n.png"
@@ -76,6 +77,7 @@ if [ -f "$REF_PDF" ]; then
         n=$(basename "$new" .png); n=${n#new-}
         [ -f "$WORK/old-$n.png" ] || printf '  page %s: ADDED\n' "$n"
     done
+    shopt -u nullglob
 else
     echo ""; echo "== no existing golden; this is the first baseline =="
 fi
@@ -85,7 +87,7 @@ echo ""; echo "== adopting new golden =="
 cp "$NEW_PDF" "$REF_PDF"
 
 # --- collect fingerprints -------------------------------------------------
-pages=$(dc_run gs -q -dNODISPLAY -dNOSAFER \
+pages=$(dc_run gs -q -dNODISPLAY -dBATCH -dNOSAFER \
     -c "($NEW_PDF_C) (r) file runpdfbegin pdfpagecount = quit" 2>&1 \
     | strip_compose_noise | tr -d '[:space:]')
 papersize=$(dc_run pdfinfo "$NEW_PDF_C" 2>&1 | strip_compose_noise \
@@ -93,15 +95,22 @@ papersize=$(dc_run pdfinfo "$NEW_PDF_C" 2>&1 | strip_compose_noise \
 tw=$(sed -n 's/^\* .textwidth=//p' "$LOG" | head -1)
 th=$(sed -n 's/^\* .textheight=//p' "$LOG" | head -1)
 ovc=$(grep -c 'Overfull \\hbox' "$LOG" || true)
-ovs=$(grep -o 'Overfull \\hbox ([0-9.]*pt too wide) in paragraph at lines [0-9-]*' "$LOG" | head -1)
-engine=$(grep -m1 -oE 'This is XeTeX[^(]*' "$LOG" | sed 's/ *$//')
+# Every `grep ... | head` below is guarded with `|| true`. Under `set -o pipefail`
+# a no-match grep fails the whole pipeline and aborts the run — which is exactly
+# what happens for a fixture that legitimately has no overfull box, or a log that
+# does not carry the line being looked for. An empty value here is data, not a
+# crash: the verification will compare it and report the mismatch.
+ovs=$(grep -o 'Overfull \\hbox ([0-9.]*pt too wide) in paragraph at lines [0-9-]*' "$LOG" | head -1 || true)
+engine=$(grep -m1 -oE 'This is XeTeX[^(]*' "$LOG" | sed 's/ *$//' || true)
 # The base image is pinned by digest, which does not say which day's TeX Live
 # is inside it. Record that here instead, so the manifest remains a complete
 # description of the environment (AGENTS.md §5).
 tlversion=$(dc_run tlmgr --version 2>&1 | strip_compose_noise \
-    | grep -E 'tlmgr revision|TeX Live .* version' | tr '\n' ' ' | sed 's/ *$//')
-fonts=$(dc_run gs -q -dNODISPLAY -dPDFINFO "$NEW_PDF_C" 2>&1 | strip_compose_noise \
-    | sed -n '/Font/,$p' | grep -oE '[A-Za-z0-9+._-]*Noto[A-Za-z0-9+._-]*' | sort -u)
+    | grep -E 'tlmgr revision|TeX Live .* version' | tr '\n' ' ' | sed 's/ *$//' || true)
+# -dBATCH: without it gs enters its interactive prompt after processing the file
+# and waits on stdin instead of exiting.
+fonts=$(dc_run gs -q -dNODISPLAY -dBATCH -dNOPAUSE -dPDFINFO "$NEW_PDF_C" 2>&1 | strip_compose_noise \
+    | sed -n '/Font/,$p' | grep -oE '[A-Za-z0-9+._-]*Noto[A-Za-z0-9+._-]*' | sort -u || true)
 texsha=$(sha256_of "$REF_TEX" | awk '{print $1}')
 pdfsha=$(sha256_of "$REF_PDF" | awk '{print $1}')
 

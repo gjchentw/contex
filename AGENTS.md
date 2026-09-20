@@ -185,6 +185,10 @@ what makes CJK typesetting practical. Its output path is `xdvipdfmx`, not direct
 
 - `provide=*` lets babel synthesise locale data for any language requested, so `chinese` works
   without a separate `babel-chinese` package.
+- **`import=zh-Hant`, not a bare `import`.** A bare `\babelprovide[import]{chinese}` resolves
+  to Chinese *Simplified*, which tags Traditional faces with a Simplified OpenType language.
+  `style/contex-cjk.sty` pairs the locale tag and the font-family suffix in a single package
+  option (`traditional` / `simplified`) precisely so the two cannot drift apart.
 - `onchar=ids fonts` is the key mechanism: babel switches **both** the font **and** the
   per-script typographic rules automatically, based on each character's script. Mixed
   CJK/Latin text therefore needs *no manual markup at all* — no `\begin{CJK}`, no `\zh{}`.
@@ -198,25 +202,35 @@ not add one alongside `babel`, as they fight over the same hooks.
 
 ### 6.3 Fonts are the highest-risk area
 
-- **A bold request resolves against the installed weight set, not against a name.**
-  `fonts-noto-cjk` ships Regular and Bold; `fonts-noto-cjk-extra` adds Black, Medium, Light,
-  DemiLight and Thin. With the extra weights present, fontconfig can legitimately answer a
-  bold request with the **Black** face rather than Bold — and every bold run then has different
-  metrics, so the page reflows.
+- **A bold request resolves against the installed weight set, not against a name.** Every Noto
+  family in this image registers its extra weights under the *same family name* as Regular and
+  Bold — `Noto Serif` covers Bold, SemiBold, ExtraBold, Black, Medium, Light, ExtraLight and
+  Thin; the CJK families likewise gain Black, Medium, Light, DemiLight and Thin from
+  `fonts-noto-cjk-extra`. Asked for "bold", fontspec may legitimately return any of them, and
+  every bold run then has different metrics, so the page reflows.
 
-  `style/contex-cjk.sty` therefore names `BoldFont={... Bold}` explicitly on every CJK slot.
-  Authors keep access to the extra weights, and `\textbf` still means Bold. **Do not remove
-  those `BoldFont` options**; doing so hands the decision back to whatever weights the image
-  happens to contain. A bold CJK run appears in the fixture so that a regression here is
-  caught.
+  This is observed behaviour, not a theoretical worry. Before the fix below, Latin `\textbf` in
+  the fixture embedded `NotoSerif-ExtraBold`.
+
+  `style/contex-cjk.sty` therefore names its faces explicitly — `BoldFont`, `ItalicFont` and
+  `BoldItalicFont` on the Latin slots, `BoldFont` on the CJK ones. Authors keep access to the
+  extra weights by naming them directly; `\textbf` simply stops being a guess. **Do not remove
+  those options**: doing so hands the decision back to whatever weights the image happens to
+  contain. Both a Latin and a CJK bold run appear in the fixture so a regression is caught.
+
+  The hazard applies to *any* font family with more than two weights, which is most modern
+  ones. It is not specific to CJK.
 - **The Noto CJK families ship no italic face.** XeLaTeX logs `Could not resolve font
   "... /I"` for CJK `\textit`. This is **expected and harmless**. Do not "fix" it by faking a
   slant: a synthetic oblique distorts CJK glyphs, and the change would move every affected
   line.
-- **There is no monospaced CJK face available.** Debian ships only the Sans and Serif CJK
-  collections; no `Noto Sans Mono CJK TC` exists to install. The CJK `\ttfamily` slot is mapped
-  to the sans CJK family instead — not monospaced, but correctly covered. Leaving it unset
-  would render CJK inside `\texttt` as tofu, since the Latin mono font has no CJK coverage.
+- **A monospaced CJK face is available** (`Noto Sans Mono CJK TC`) and is mapped to the CJK
+  `\ttfamily` slot, so `\texttt` keeps a fixed advance for Chinese as well as Latin. Leaving
+  that slot unset would render CJK inside `\texttt` as tofu, since the Latin mono font has no
+  CJK coverage at all.
+- **Embedded face names cannot tell TC from SC.** Noto CJK ships as an OTC collection, so both
+  the TC and SC configurations embed faces named `NotoSerifCJKjp-*`. The evidence that the
+  right locale is in force is the OpenType language tag in the log, not the embedded name.
 - **Embedded face names may not match the family name.** Noto CJK ships as an OTC collection,
   so a document using the TC family can legitimately embed faces named `...CJKjp-Regular`.
   What matters is which faces are embedded, not what they are called.
@@ -366,7 +380,8 @@ Each of these is a realistic shortcut, which is why it is named explicitly.
 - **Do not narrow `scheme-full`** into a hand-maintained package list. See §5.
 - **Do not add `xeCJK` or `ctex`** alongside `babel`. See §6.2.
 - **Do not "fix" the missing CJK italic face.** See §6.3.
-- **Do not remove the explicit `BoldFont` options** from `style/contex-cjk.sty`. See §6.3.
+- **Do not remove the explicit face options** (`BoldFont`, `ItalicFont`, `BoldItalicFont`)
+  from `style/contex-cjk.sty`. See §6.3.
 - **Do not enable `-shell-escape` by default.** See §6.7.
 - **Do not move PDF tooling onto the host.** See P5.
 - **Do not put document content, house style, or authorial guidance in this repository.**

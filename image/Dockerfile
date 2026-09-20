@@ -32,13 +32,34 @@ ENV DEBIAN_FRONTEND=noninteractive
 # The CJK font package set is itself a pin: the installed weight set is what
 # decides whether a bold request resolves to Bold or to Black. Changing these
 # packages changes typeset output (AGENTS.md §6.3).
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
+# The cache mounts and the retry setting are not incidental. This layer pulls
+# ~230 MB, which on a slow link takes long enough that a transient DNS or network
+# failure part-way through is likely — and without them, such a failure discards
+# everything already downloaded and the whole layer starts over.
+#
+#   - the two cache mounts keep apt's package lists and downloaded .debs outside
+#     the image layer, so a retry resumes instead of restarting;
+#   - docker-clean is removed because the stock Debian image configures apt to
+#     delete downloaded .debs immediately, which would defeat the cache mount;
+#   - Acquire::Retries lets apt itself ride out a brief resolver failure.
+#
+# Because the lists and archives live in cache mounts, they are not part of the
+# published image and need no explicit `rm -rf`.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    set -eux; \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    printf '%s\n' \
+      'Acquire::Retries "10";' \
+      'Acquire::http::Timeout "60";' \
+      'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+      > /etc/apt/apt.conf.d/99contex; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
         fontconfig \
         fonts-noto-core fonts-noto-cjk fonts-noto-cjk-extra \
-        poppler-utils ghostscript imagemagick \
- && rm -rf /var/lib/apt/lists/* \
- && fc-cache -f
+        poppler-utils ghostscript imagemagick; \
+    fc-cache -f
 
 # Writable scratch locations, so the container can run as an arbitrary non-root
 # UID (docker-compose.yml `user:`) without a writable $HOME. This is what keeps

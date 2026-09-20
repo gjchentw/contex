@@ -15,9 +15,11 @@
 %% Requires XeLaTeX. See AGENTS.md §6 for why.
 %%
 %% Options:
-%%   serif      (default) Noto Serif / Noto Serif CJK TC in the \rmfamily slot
-%%   sans                 Noto Sans  / Noto Sans CJK TC  in the \rmfamily slot
-%%   nolistfix            do not touch itemize labels
+%%   serif        (default) Noto Serif / Noto Serif CJK in the \rmfamily slot
+%%   sans                   Noto Sans  / Noto Sans CJK  in the \rmfamily slot
+%%   traditional  (default) zh-Hant locale + the ...CJK TC faces
+%%   simplified             zh-Hans locale + the ...CJK SC faces
+%%   nolistfix              do not touch itemize labels
 %%
 %% Deliberately NOT included: geometry, line spacing, \parindent. Page layout
 %% is a per-document decision, not an environment-wide one.
@@ -26,8 +28,17 @@
 
 \newif\ifcontex@sans   \contex@sansfalse
 \newif\ifcontex@listfix \contex@listfixtrue
+%% Locale tag and font-family suffix move together: a Traditional document wants
+%% both zh-Hant and the TC faces. Pairing them in one option is what stops the
+%% two from drifting apart — the combination this package originally shipped with
+%% was zh (which babel resolves to Simplified) against TC fonts, which tags the
+%% text with the wrong OpenType language.
+\def\contex@locale{zh-Hant}
+\def\contex@cjk{TC}
 \DeclareOption{sans}{\contex@sanstrue}
 \DeclareOption{serif}{\contex@sansfalse}
+\DeclareOption{traditional}{\def\contex@locale{zh-Hant}\def\contex@cjk{TC}}
+\DeclareOption{simplified}{\def\contex@locale{zh-Hans}\def\contex@cjk{SC}}
 \DeclareOption{nolistfix}{\contex@listfixfalse}
 \DeclareOption*{\PackageWarning{contex-cjk}{Unknown option '\CurrentOption'}}
 \ProcessOptions\relax
@@ -38,42 +49,56 @@
 \RequirePackage{fontspec}
 \RequirePackage[chinese, provide=*]{babel}
 
-\babelprovide[import, onchar=ids fonts]{chinese}
+%% `import=zh-Hant` (rather than a bare `import`) is what makes babel tag the
+%% text as Chinese Traditional. With a bare import babel resolves `chinese` to
+%% Simplified, and the document then carries Traditional faces under a
+%% Simplified OpenType language tag. See AGENTS.md §6.2.
+\babelprovide[import=\contex@locale, onchar=ids fonts]{chinese}
 \babelprovide[import, onchar=ids fonts]{english}
 
-%% Every CJK slot below names its BoldFont explicitly. This is deliberate and it
-%% is the single most important line of defence in this file.
+%% Every slot below names its faces explicitly. This is deliberate and it is the
+%% single most important thing in this file.
 %%
 %% A bold request is otherwise resolved by fontconfig against whatever weights
-%% happen to be installed. The image installs fonts-noto-cjk-extra, which adds
-%% Black, Medium, Light, DemiLight and Thin alongside Regular and Bold — and in
-%% that situation a bold request can legitimately come back as *Black* rather
-%% than Bold. Every bold run then has different metrics and the page reflows.
+%% happen to be installed, and every Noto family here registers ExtraBold, Black,
+%% SemiBold and Medium under the *same family name* as Regular and Bold. Asked
+%% for bold, fontspec can legitimately return ExtraBold or Black — this was
+%% observed, not theorised: before these options were added, Latin \textbf in the
+%% fixture embedded NotoSerif-ExtraBold. Every bold run then has different metrics
+%% and the page reflows.
 %%
-%% Naming BoldFont removes the ambiguity: authors keep access to the extra
-%% weights, and \textbf still means Bold. See AGENTS.md §6.3.
+%% This applies to the Latin families exactly as much as to the CJK ones, so both
+%% are pinned. Authors keep access to the extra weights by naming them directly;
+%% \textbf just stops being a guess. See AGENTS.md §6.3.
+%%
+%% The CJK slots pin only BoldFont, because the Noto CJK families genuinely have
+%% no italic face — see the note below.
 
 %% The \rmfamily slot carries the document's main text, so it is the one the
 %% `sans`/`serif` option switches.
 \ifcontex@sans
-  \babelfont{rm}{Noto Sans}
-  \babelfont[chinese]{rm}[BoldFont={Noto Sans CJK TC Bold}]{Noto Sans CJK TC}
+  \babelfont{rm}[BoldFont={Noto Sans Bold}, ItalicFont={Noto Sans Italic},
+                  BoldItalicFont={Noto Sans Bold Italic}]{Noto Sans}
+  \babelfont[chinese]{rm}[BoldFont={Noto Sans CJK \contex@cjk\space Bold}]%
+      {Noto Sans CJK \contex@cjk}
 \else
-  \babelfont{rm}{Noto Serif}
-  \babelfont[chinese]{rm}[BoldFont={Noto Serif CJK TC Bold}]{Noto Serif CJK TC}
+  \babelfont{rm}[BoldFont={Noto Serif Bold}, ItalicFont={Noto Serif Italic},
+                  BoldItalicFont={Noto Serif Bold Italic}]{Noto Serif}
+  \babelfont[chinese]{rm}[BoldFont={Noto Serif CJK \contex@cjk\space Bold}]%
+      {Noto Serif CJK \contex@cjk}
 \fi
 
-\babelfont{sf}{Noto Sans}
-\babelfont[chinese]{sf}[BoldFont={Noto Sans CJK TC Bold}]{Noto Sans CJK TC}
+\babelfont{sf}[BoldFont={Noto Sans Bold}, ItalicFont={Noto Sans Italic},
+               BoldItalicFont={Noto Sans Bold Italic}]{Noto Sans}
+\babelfont[chinese]{sf}[BoldFont={Noto Sans CJK \contex@cjk\space Bold}]%
+    {Noto Sans CJK \contex@cjk}
 
-%% Latin monospace has a real monospaced face; Traditional Chinese does not.
-%% Debian's fonts-noto-cjk/-extra ship only the Sans and Serif CJK collections —
-%% there is no "Noto Sans Mono CJK TC" to install. The CJK \ttfamily slot is
-%% therefore mapped to the sans CJK family: not monospaced, but correct glyphs.
-%% The alternative — leaving it unset — renders CJK inside \texttt as tofu,
-%% because the Latin mono font has no CJK coverage at all.
-\babelfont{tt}{Noto Sans Mono}
-\babelfont[chinese]{tt}[BoldFont={Noto Sans CJK TC Bold}]{Noto Sans CJK TC}
+%% A real monospaced CJK face is available, so \texttt keeps its fixed advance
+%% for Chinese as well as Latin. Leaving the CJK tt slot unset would render CJK
+%% inside \texttt as tofu, because the Latin mono font has no CJK coverage.
+\babelfont{tt}[BoldFont={Noto Sans Mono Bold}]{Noto Sans Mono}
+\babelfont[chinese]{tt}[BoldFont={Noto Sans Mono CJK \contex@cjk\space Bold}]%
+    {Noto Sans Mono CJK \contex@cjk}
 
 %% Note on italics: the Noto CJK families ship no italic face, so XeLaTeX logs
 %% `Could not resolve font "... /I"` for CJK \textit. That warning is expected

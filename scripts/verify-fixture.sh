@@ -59,7 +59,8 @@ note "  produced $NEW_PDF"
 # mismatch here says the environment is wrong and pixel comparison would only
 # confirm it more slowly. Assert them before spending time on rendering.
 note ""; note "== Step 3: fingerprints =="
-pages=$(dc_run gs -q -dNODISPLAY -dNOSAFER \
+# -dBATCH: without it gs waits on stdin after the file instead of exiting.
+pages=$(dc_run gs -q -dNODISPLAY -dBATCH -dNOSAFER \
     -c "($NEW_PDF_C) (r) file runpdfbegin pdfpagecount = quit" 2>&1 \
     | strip_compose_noise | tr -d '[:space:]')
 check "page count" "$pages" "$(manifest_get page_count)"
@@ -71,7 +72,9 @@ check "textheight" "$th" "$(manifest_get textheight)"
 
 overfull=$(grep -c 'Overfull \\hbox' "$LOG" || true)
 check "overfull hbox count" "$overfull" "$(manifest_get overfull_count)"
-sig=$(grep -o 'Overfull \\hbox ([0-9.]*pt too wide) in paragraph at lines [0-9-]*' "$LOG" | head -1)
+# `|| true`: under `set -o pipefail` a no-match grep would abort the run instead
+# of letting the check below report the mismatch it exists to report.
+sig=$(grep -o 'Overfull \\hbox ([0-9.]*pt too wide) in paragraph at lines [0-9-]*' "$LOG" | head -1 || true)
 check "overfull signature" "$sig" "$(manifest_get overfull_signature)"
 
 # --- Step 4: render both PDFs with the same renderer at the same DPI ------
