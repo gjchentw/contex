@@ -33,6 +33,13 @@ The `.env` step makes build artifacts owned by you rather than by root. The scri
 The first build pulls a ~2.6 GB `scheme-full` TeX Live image, so expect it to be dominated by
 download time. It is cached afterwards.
 
+`image/Dockerfile` uses `RUN --mount=type=cache` so that an interrupted apt download resumes
+instead of restarting, which **requires BuildKit** — i.e. a docker CLI with the `buildx`
+plugin. Without it `docker compose build` falls back to the classic builder and fails on that
+layer. `scripts/verify-fixture.sh` and `scripts/rebaseline.sh` rebuild the image before they
+use it, so that neither can certify a stale one; if you cannot install buildx, run them with
+`CONTEX_SKIP_BUILD=1` to use the already-built image, which they will say they are doing.
+
 ## Compiling a document
 
 ```sh
@@ -70,9 +77,11 @@ scripts/verify-fixture.sh
 ```
 
 Compiles `fixtures/fixture.tex` and compares it against the golden `fixtures/fixture.pdf`:
-cheap fingerprints first (page count, `\textwidth`, the exact overfull-hbox magnitude), then a
-per-page pixel diff requiring zero differing pixels. Run it after any change to the image or
-the style files.
+cheap fingerprints first (page count and size, `\textwidth`, the exact overfull-hbox
+magnitude, and the set of font faces the PDF embedded), then a per-page pixel diff requiring
+zero differing pixels. If a fingerprint moved, it stops before rendering — the environment
+already differs, and a pixel diff would only say so more slowly. Run it after any change to
+the image or the style files.
 
 If you deliberately changed the environment and the output legitimately moved:
 

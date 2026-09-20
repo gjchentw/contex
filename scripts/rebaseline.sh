@@ -52,6 +52,9 @@ export TEX_FILE=fixture.tex
 
 echo "== compiling fixture (SOURCE_DATE_EPOCH=$EPOCH) =="
 rm -rf "$OUT_DIR"; mkdir -p "$WORK"
+ensure_image_current "$OUT_DIR/build.out" || {
+    echo "image build FAILED — last 20 lines of $OUT_DIR/build.out:"
+    tail -20 "$OUT_DIR/build.out"; exit 1; }
 SOURCE_DATE_EPOCH="$EPOCH" FORCE_SOURCE_DATE=1 \
     docker compose run --rm compile-latex >"$OUT_DIR/compile.out" 2>&1 || {
         echo "compile FAILED — last 30 lines:"; tail -30 "$OUT_DIR/compile.out"; exit 1; }
@@ -87,11 +90,9 @@ echo ""; echo "== adopting new golden =="
 cp "$NEW_PDF" "$REF_PDF"
 
 # --- collect fingerprints -------------------------------------------------
-pages=$(dc_run gs -q -dNODISPLAY -dBATCH -dNOSAFER \
-    -c "($NEW_PDF_C) (r) file runpdfbegin pdfpagecount = quit" 2>&1 \
-    | strip_compose_noise | tr -d '[:space:]')
-papersize=$(dc_run pdfinfo "$NEW_PDF_C" 2>&1 | strip_compose_noise \
-    | sed -n 's/^Page size: *//p' | head -1)
+pdfinfo_out=$(dc_run pdfinfo "$NEW_PDF_C" 2>&1 | strip_compose_noise)
+pages=$(printf '%s\n' "$pdfinfo_out" | sed -n 's/^Pages: *//p' | head -1)
+papersize=$(printf '%s\n' "$pdfinfo_out" | sed -n 's/^Page size: *//p' | head -1)
 tw=$(sed -n 's/^\* .textwidth=//p' "$LOG" | head -1)
 th=$(sed -n 's/^\* .textheight=//p' "$LOG" | head -1)
 ovc=$(grep -c 'Overfull \\hbox' "$LOG" || true)
@@ -107,10 +108,18 @@ engine=$(grep -m1 -oE 'This is XeTeX[^(]*' "$LOG" | sed 's/ *$//' || true)
 # description of the environment (AGENTS.md §5).
 tlversion=$(dc_run tlmgr --version 2>&1 | strip_compose_noise \
     | grep -E 'tlmgr revision|TeX Live .* version' | tr '\n' ' ' | sed 's/ *$//' || true)
-# -dBATCH: without it gs enters its interactive prompt after processing the file
-# and waits on stdin instead of exiting.
-fonts=$(dc_run gs -q -dNODISPLAY -dBATCH -dNOPAUSE -dPDFINFO "$NEW_PDF_C" 2>&1 | strip_compose_noise \
-    | sed -n '/Font/,$p' | grep -oE '[A-Za-z0-9+._-]*Noto[A-Za-z0-9+._-]*' | sort -u || true)
+# §5 calls the font package set a pin, but image/Dockerfile names the packages
+# without pinning their versions — apt resolves them against whatever Debian
+# serves on the day of the build. Record the versions that actually produced
+# this baseline, so a later cold rebuild that drifts can be identified as the
+# cause rather than guessed at.
+pkgversions=$(dc_run sh -c 'dpkg-query -W fonts-noto-core fonts-noto-cjk \
+    fonts-noto-cjk-extra fontconfig ghostscript imagemagick poppler-utils' 2>&1 \
+    | strip_compose_noise | tr '\t' ' ' | grep -E '.' || true)
+# Recorded normalised — without the per-subset tag and without the -Identity-H
+# wrapper duplicate — so that the list names faces rather than one subsetting
+# run, and so verify-fixture.sh can compare it directly.
+fonts=$(pdf_noto_faces "$NEW_PDF_C" || true)
 texsha=$(sha256_of "$REF_TEX" | awk '{print $1}')
 pdfsha=$(sha256_of "$REF_PDF" | awk '{print $1}')
 
@@ -129,6 +138,16 @@ Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 base_image: $BASE_IMAGE
 texlive_version: $tlversion
 engine: $engine
+
+### Debian package versions
+
+image/Dockerfile names these packages but does not pin their versions, so a cold
+rebuild resolves them against whatever Debian serves that day. These are the
+versions that produced this baseline.
+
+\`\`\`
+$pkgversions
+\`\`\`
 
 ## Build determinism
 

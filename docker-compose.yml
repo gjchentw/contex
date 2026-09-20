@@ -3,21 +3,30 @@ services:
     build:
       context: ./image
     image: contex/compile-latex:tl2026
-    container_name: contex-compile-latex
+    # No container_name: `docker compose run` ignores it and derives its own
+    # (contex-compile-latex-run-<hash>), and setting it would block running two
+    # compilations at once.
+    #
     # Run as the invoking user so that files written into build/ are owned by
     # the host user rather than root. The image keeps every cache it needs in
     # /tmp, so it does not require a writable $HOME.
     user: "${CONTEX_UID:-1000}:${CONTEX_GID:-1000}"
+    # List form, not mapping form, and the distinction is load-bearing. An entry
+    # without `=` is passed through only when it is set in the caller's
+    # environment, and omitted otherwise. The mapping form `SOURCE_DATE_EPOCH:
+    # ${SOURCE_DATE_EPOCH:-}` instead sets it to the empty string, which is not
+    # the same as unset: fontconfig then prints "SOURCE_DATE_EPOCH invalid" on
+    # every ordinary build.
     environment:
       # Which document to compile, relative to the mounted source directory.
       # The service is deliberately not hard-wired to the fixture (AGENTS.md P1).
-      TEX_FILE: ${TEX_FILE:-document.tex}
+      - TEX_FILE=${TEX_FILE:-document.tex}
       # Unset by default: an ordinary document wants a real \today. Any build
       # that claims to be reproducible must pin both of these explicitly, which
       # is what scripts/verify-fixture.sh and scripts/rebaseline.sh do
       # (AGENTS.md §6.6).
-      SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-}
-      FORCE_SOURCE_DATE: ${FORCE_SOURCE_DATE:-}
+      - SOURCE_DATE_EPOCH
+      - FORCE_SOURCE_DATE
     volumes:
       # Read-only: the container physically cannot write next to the source.
       - ${TEX_SRC_DIR:-./template}:/work/src:ro
