@@ -1,0 +1,33 @@
+%% contex-stem.sty — the maths, tables and figures layer.
+%%
+%% Purely a curated \RequirePackage list: every one of these ships with the
+%% scheme-full installation in image/Dockerfile, so a document never has to
+%% work around a missing package (AGENTS.md P4).
+%%
+%% Deliberately NOT included: unicode-math. Loading it replaces every maths
+%% glyph in the document, so it is a per-document decision with visible
+%% consequences, not something an environment should impose.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{contex-stem}[2026/09/20 v1.0 contex STEM layer]
+
+\RequirePackage{amsmath}      % align, gather, \text, \DeclareMathOperator
+\RequirePackage{amssymb}      % \mathbb, \lesssim, ...
+\RequirePackage{mathtools}    % \DeclarePairedDelimiter, \coloneqq, fixes to amsmath
+\RequirePackage{booktabs}     % \toprule/\midrule/\bottomrule instead of \hline
+\RequirePackage{array}        % extended column specifications
+\RequirePackage{siunitx}      % \qty, \num, \si — units set consistently
+\RequirePackage{graphicx}
+\RequirePackage{xcolor}
+\RequirePackage{cancel}
+\RequirePackage{tikz}
+%% No trailing comma: pgf splits this list on commas and an empty entry makes it
+%% try to load a library with no name.
+\usetikzlibrary{patterns,arrows.meta,decorations.pathmorphing,%
+                decorations.pathreplacing,calc,positioning}
+
+%% Under XeLaTeX, pgf/TikZ drives output through pgfsys-dvipdfmx.def rather
+%% than pgfsys-pdftex.def. Most pictures are unaffected; a few PDF-specific
+%% features (some transparency groups, some shading modes) behave differently
+%% than they do under pdfLaTeX. See AGENTS.md §6.8.
+
+\endinput

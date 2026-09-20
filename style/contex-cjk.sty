@@ -1,0 +1,89 @@
+%% contex-cjk.sty — Traditional-Chinese + Latin font and language setup.
+%%
+%% This is the reusable core of the environment. The mechanism is babel's
+%% `provide=*` + \babelprovide[onchar=ids fonts] + \babelfont, NOT xeCJK and
+%% NOT ctex:
+%%
+%%   * `provide=*` tells babel to generate locale data for any language asked
+%%     for, so `chinese` works without a dedicated babel-chinese install.
+%%   * `onchar=ids fonts` makes babel switch font *and* per-script typographic
+%%     rules automatically based on each character's script. Mixed CJK/Latin
+%%     text therefore needs no manual markup at all.
+%%   * \babelfont assigns a family per language and per NFSS slot, and defers
+%%     the actual fontspec call until \begin{document}.
+%%
+%% Requires XeLaTeX. See AGENTS.md §6 for why.
+%%
+%% Options:
+%%   serif      (default) Noto Serif / Noto Serif CJK TC in the \rmfamily slot
+%%   sans                 Noto Sans  / Noto Sans CJK TC  in the \rmfamily slot
+%%   nolistfix            do not touch itemize labels
+%%
+%% Deliberately NOT included: geometry, line spacing, \parindent. Page layout
+%% is a per-document decision, not an environment-wide one.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{contex-cjk}[2026/09/20 v1.0 contex CJK+Latin setup]
+
+\newif\ifcontex@sans   \contex@sansfalse
+\newif\ifcontex@listfix \contex@listfixtrue
+\DeclareOption{sans}{\contex@sanstrue}
+\DeclareOption{serif}{\contex@sansfalse}
+\DeclareOption{nolistfix}{\contex@listfixfalse}
+\DeclareOption*{\PackageWarning{contex-cjk}{Unknown option '\CurrentOption'}}
+\ProcessOptions\relax
+
+\RequirePackage{iftex}
+\RequireXeTeX
+
+\RequirePackage{fontspec}
+\RequirePackage[chinese, provide=*]{babel}
+
+\babelprovide[import, onchar=ids fonts]{chinese}
+\babelprovide[import, onchar=ids fonts]{english}
+
+%% Every CJK slot below names its BoldFont explicitly. This is deliberate and it
+%% is the single most important line of defence in this file.
+%%
+%% A bold request is otherwise resolved by fontconfig against whatever weights
+%% happen to be installed. The image installs fonts-noto-cjk-extra, which adds
+%% Black, Medium, Light, DemiLight and Thin alongside Regular and Bold — and in
+%% that situation a bold request can legitimately come back as *Black* rather
+%% than Bold. Every bold run then has different metrics and the page reflows.
+%%
+%% Naming BoldFont removes the ambiguity: authors keep access to the extra
+%% weights, and \textbf still means Bold. See AGENTS.md §6.3.
+
+%% The \rmfamily slot carries the document's main text, so it is the one the
+%% `sans`/`serif` option switches.
+\ifcontex@sans
+  \babelfont{rm}{Noto Sans}
+  \babelfont[chinese]{rm}[BoldFont={Noto Sans CJK TC Bold}]{Noto Sans CJK TC}
+\else
+  \babelfont{rm}{Noto Serif}
+  \babelfont[chinese]{rm}[BoldFont={Noto Serif CJK TC Bold}]{Noto Serif CJK TC}
+\fi
+
+\babelfont{sf}{Noto Sans}
+\babelfont[chinese]{sf}[BoldFont={Noto Sans CJK TC Bold}]{Noto Sans CJK TC}
+
+%% Latin monospace has a real monospaced face; Traditional Chinese does not.
+%% Debian's fonts-noto-cjk/-extra ship only the Sans and Serif CJK collections —
+%% there is no "Noto Sans Mono CJK TC" to install. The CJK \ttfamily slot is
+%% therefore mapped to the sans CJK family: not monospaced, but correct glyphs.
+%% The alternative — leaving it unset — renders CJK inside \texttt as tofu,
+%% because the Latin mono font has no CJK coverage at all.
+\babelfont{tt}{Noto Sans Mono}
+\babelfont[chinese]{tt}[BoldFont={Noto Sans CJK TC Bold}]{Noto Sans CJK TC}
+
+%% Note on italics: the Noto CJK families ship no italic face, so XeLaTeX logs
+%% `Could not resolve font "... /I"` for CJK \textit. That warning is expected
+%% and harmless; do not "fix" it by faking a slant, which distorts the glyphs.
+
+\RequirePackage{enumitem}
+%% babel's Chinese itemize label is a full-width bullet that sits oddly next to
+%% Latin text; `-` matches what mixed-script documents normally want.
+\ifcontex@listfix
+  \setlist[itemize]{label=-}
+\fi
+
+\endinput

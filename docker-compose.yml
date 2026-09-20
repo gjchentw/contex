@@ -1,0 +1,27 @@
+services:
+  compile-latex:
+    build:
+      context: ./image
+    image: contex/compile-latex:tl2026
+    container_name: contex-compile-latex
+    # Run as the invoking user so that files written into build/ are owned by
+    # the host user rather than root. The image keeps every cache it needs in
+    # /tmp, so it does not require a writable $HOME.
+    user: "${CONTEX_UID:-1000}:${CONTEX_GID:-1000}"
+    environment:
+      # Which document to compile, relative to the mounted source directory.
+      # The service is deliberately not hard-wired to the fixture (AGENTS.md P1).
+      TEX_FILE: ${TEX_FILE:-document.tex}
+      # Unset by default: an ordinary document wants a real \today. Any build
+      # that claims to be reproducible must pin both of these explicitly, which
+      # is what scripts/verify-fixture.sh and scripts/rebaseline.sh do
+      # (AGENTS.md §6.6).
+      SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-}
+      FORCE_SOURCE_DATE: ${FORCE_SOURCE_DATE:-}
+    volumes:
+      # Read-only: the container physically cannot write next to the source.
+      - ${TEX_SRC_DIR:-./template}:/work/src:ro
+      # Output always lands outside the source tree (AGENTS.md P3).
+      - ${TEX_OUT_DIR:-./build}:/work/out
+      # contex's style files, found via TEXINPUTS. Read-only.
+      - ./style:/work/style:ro

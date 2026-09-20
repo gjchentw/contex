@@ -1,0 +1,143 @@
+%% fixtures/fixture.tex — READ-ONLY FIXTURE (AGENTS.md P3)
+%%
+%% The acceptance test for the compile-latex service. It has no subject matter
+%% of its own: it exists purely to exercise every axis that the verification in
+%% AGENTS.md §7 is meant to protect, and to fail visibly when any of them moves.
+%%
+%%   §1  mixed CJK/Latin line breaking, including the script boundary
+%%   §2  weight and shape resolution (CJK bold, CJK italic, monospace)
+%%   §3  display maths, align + \eqref, a \ref resolved across a page break
+%%   §4  booktabs + array + siunitx table
+%%   §5  TikZ with decorations, patterns and arrows.meta under the xetex driver
+%%   §6  one deliberate overfull \hbox, whose exact magnitude is the fingerprint
+%%
+%% \today is baked into the output, so every build of this file must pin
+%% SOURCE_DATE_EPOCH and FORCE_SOURCE_DATE (AGENTS.md §6.6). Never edit this
+%% file to make a build pass; fix the environment instead (AGENTS.md P4).
+
+\documentclass[11pt, a4paper]{article}
+
+% `verbose` affects the log only, never the typeset output. It makes geometry print
+% \textwidth/\textheight, which the verification reads as Step 3 fingerprints.
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2cm, right=2cm, verbose]{geometry}
+
+\usepackage{contex-cjk}
+\usepackage{contex-stem}
+
+\renewcommand{\baselinestretch}{1.3}
+
+\title{\textbf{contex 編譯環境驗證文件}}
+\author{contex fixture}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+
+\section{中英混排與斷行}\label{sec:mixed}
+中文在字元之間斷行，Latin text breaks at hyphenation points，兩者交界處是套件版本漂移
+最先顯現的地方。這一段刻意混入較長的英文詞組，例如 reproducibility, containerisation
+與 typographic conventions，以及行內數學 $f(x) = \sum_{n=0}^{\infty} a_n x^n$，
+讓斷行決策同時受到中文、英文與數學三種材料的影響。
+
+若字體的度量改變，或 \texttt{babel}、\texttt{array}、\texttt{amsmath} 之中任何一個套件
+的版本改變，這一段的斷行位置就會跟著改變；而斷行一旦改變，後續每一頁的內容都會位移。
+這就是為什麼 \S\ref{sec:overfull} 的那一個 overfull 數值是最便宜而且訊號最強的檢查。
+
+本文件最後一節是 \S\ref{sec:last}，它的頁碼必然落在本頁之後，因此 \verb|\ref| 必須經過
+至少兩次編譯才會解析正確。單跑一次 \texttt{xelatex} 會留下未解析的參照。
+
+\section{字重與字形解析}\label{sec:weights}
+這一段測試字體解析：\textbf{這是中文粗體}，而 \textbf{this is Latin bold}。粗體請求是
+對「已安裝字重集合」解析的，因此映像檔裡的字型套件本身就是一項 pin。
+
+Noto CJK 家族沒有斜體字面，所以 \textit{這段中文斜體} 會在 log 留下
+\texttt{Could not resolve font} 警告，這是預期行為，不應該用假斜體去「修好」它。
+Latin 的 \textit{italic} 與 \texttt{monospace 等寬} 則正常解析。
+
+\begin{itemize}
+  \item 第一項：清單標籤由 \texttt{enumitem} 設為 \texttt{-}
+  \item 第二項：mixed 中英 item text
+  \item 第三項：行內數學 $\alpha + \beta = \gamma$
+\end{itemize}
+
+\section{數學排版}\label{sec:math}
+單行顯示數學使用 \verb|\[...\]|，不使用 \verb|$$...$$|：
+\[
+  \int_{r}^{\infty} \frac{GMm}{r'^{2}} \, \mathrm{d}r' = \frac{GMm}{r}.
+\]
+
+多行對齊與編號交由 \texttt{amsmath} 的 \texttt{align} 處理：
+\begin{align}
+  \nabla \cdot \mathbf{E} &= \frac{\rho}{\varepsilon_0}, \label{eq:gauss} \\
+  \nabla \times \mathbf{B} &= \mu_0 \mathbf{J} + \mu_0 \varepsilon_0
+      \frac{\partial \mathbf{E}}{\partial t}. \label{eq:ampere}
+\end{align}
+式 \eqref{eq:gauss} 與式 \eqref{eq:ampere} 的編號同樣依賴多次編譯。
+\texttt{mathtools} 提供 $a \coloneqq b$，\texttt{cancel} 提供
+$\frac{\cancel{x}\,y}{\cancel{x}} = y$，\texttt{amssymb} 提供 $\mathbb{R}$ 與 $\lesssim$。
+
+\section{表格與單位}\label{sec:table}
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{l>{\raggedright\arraybackslash}p{4.2cm}S[table-format=3.2]}
+    \toprule
+    項目 & 說明 & {數值 (\si{\meter\per\second})} \\
+    \midrule
+    甲   & 由 \texttt{array} 提供的 \texttt{p} 欄與 \verb|>{...}| 前置宣告 & 12.30 \\
+    乙   & 由 \texttt{siunitx} 的 \texttt{S} 欄依小數點對齊            & 345.60 \\
+    丙   & 由 \texttt{booktabs} 提供橫線，不使用 \verb|\hline|          & 6.70 \\
+    \bottomrule
+  \end{tabular}
+  \caption{同時使用 \texttt{booktabs}、\texttt{array} 與 \texttt{siunitx} 的表格。}
+  \label{tab:units}
+\end{table}
+
+表 \ref{tab:units} 的欄寬與對齊都由套件計算，因此它也是 \texttt{array} 版本漂移的偵測點。
+
+\section{TikZ 圖形}\label{sec:tikz}
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[>=Stealth, scale=1.0]
+  \shade[ball color=gray!25] (0,0) circle (1);
+  \draw (0,0) circle (1);
+  \fill (0,0) circle (0.04);
+  \node at (0.35,-0.35) {$M$};
+  \fill (4.2,0) circle (0.07);
+  \node[above] at (4.2,0.12) {$m$};
+  \draw[->, thick, decorate,
+        decoration={zigzag, segment length=4pt, amplitude=1.5pt,
+                    pre length=4pt, post length=4pt}]
+    (4.05,0) -- (2.6,0);
+  \node[below] at (3.3,-0.12) {$\dfrac{GMm}{r^2}$};
+  \draw[->, very thick, blue] (4.35,0) -- (6.0,0);
+  \node[above, blue] at (5.2,0.12) {$\vec{F}$};
+  \draw[<->, dashed] (0,-1.6) -- (4.2,-1.6);
+  \node[below] at (2.1,-1.65) {$r$};
+  \draw[pattern=north east lines] (-1.2,-2.6) rectangle (1.2,-2.1);
+  \draw[decorate, decoration={brace, amplitude=5pt}] (2.6,0.4) -- (6.0,0.4);
+\end{tikzpicture}
+\caption{使用 \texttt{decorations.pathmorphing}、\texttt{decorations.pathreplacing}、
+         \texttt{patterns} 與 \texttt{arrows.meta} 的圖形。}
+\label{fig:tikz}
+\end{figure}
+
+圖 \ref{fig:tikz} 在 XeLaTeX 之下經由 \texttt{pgfsys-dvipdfmx.def} 輸出，與 pdfLaTeX
+的 \texttt{pgfsys-pdftex.def} 並不是同一條路徑。
+
+\section{刻意的 overfull hbox}\label{sec:overfull}
+下面這個窄欄裡放了一個無法斷開的長字串，必然溢出。它產生本文件唯一的 overfull
+\verb|\hbox|，其精確數值記錄在 \texttt{fixtures/MANIFEST.md}，是驗證流程 Step 3 的指紋：
+
+\noindent\begin{minipage}{0.30\textwidth}
+\texttt{AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA}
+\end{minipage}
+
+只要這個數值仍然吻合，字體度量與套件版本幾乎就確定是正確的；一旦它改變，就不必再往下
+做像素比對，環境已經不對了。
+
+\section{結尾}\label{sec:last}
+本節存在的唯一目的，是讓 \S\ref{sec:mixed} 的前向參照必須跨頁解析。
+
+\end{document}
